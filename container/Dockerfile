@@ -5,6 +5,7 @@ RUN apt-get update &&  \
       strace           \
       gdb              \
       tcpdump          \
+      util-linux       \
       &&  \
     apt-get clean
 CMD ["/bin/bash"]
