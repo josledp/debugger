@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -60,4 +61,8 @@ func main() {
 
 	nodeName := pod.Spec.NodeName
 	log.Printf("pod %s is on node %s", *podName, nodeName)
+
+	podDef := strings.Replace(podDefinition, "{{nodeName}}", nodeName)
+
+	debuggerPod, err = k8sClient.CoreV1().Pods(*namespace).Create()
 }
