@@ -5,6 +5,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
+
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,13 +51,14 @@ func main() {
 		}
 
 	}
+	log.Println("creating k8s client")
 	// creates the clientset
 	k8sClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		log.Fatalf("unable to setup client: %v", err)
 
 	}
-
+	log.Printf("searching pod %s", *podName)
 	pod, err := k8sClient.CoreV1().Pods(*namespace).Get(*podName, metav1.GetOptions{})
 	if err != nil {
 		log.Fatalf("unable to get pod %s: %v", *podName, err)
@@ -66,6 +70,7 @@ func main() {
 	privilegeEscalation := true
 	privileged := true
 
+	log.Println("creating debugPod")
 	debugPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "debugger",
@@ -92,4 +97,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("error creating debugPod: %v", err)
 	}
+	for {
+		status, err := k8sClient.CoreV1().Pods(*namespace).Get("debugger", metav1.GetOptions{})
+		if err != nil {
+			log.Println("unable to retrieve debug pod status")
+		}
+		log.Printf("Status is: %s", status.Status.Phase)
+		time.Sleep(1 * time.Second)
+	}
+
 }
