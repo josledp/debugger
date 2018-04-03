@@ -5,8 +5,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -17,6 +17,7 @@ func main() {
 	var kubeconfig *string
 	var config *rest.Config
 	var err error
+
 	if home := os.Getenv("HOME"); home != "" {
 		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "absolute path to the kubeconfig file")
 	} else {
@@ -62,7 +63,33 @@ func main() {
 	nodeName := pod.Spec.NodeName
 	log.Printf("pod %s is on node %s", *podName, nodeName)
 
-	podDef := strings.Replace(podDefinition, "{{nodeName}}", nodeName)
+	privilegeEscalation := true
+	privileged := true
 
-	debuggerPod, err = k8sClient.CoreV1().Pods(*namespace).Create()
+	debugPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "debugger",
+			Namespace: *namespace,
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				v1.Container{
+					Name:  "debugger",
+					Image: "debugger",
+					SecurityContext: &v1.SecurityContext{
+						AllowPrivilegeEscalation: &privilegeEscalation,
+						Privileged:               &privileged,
+					},
+				},
+			},
+			NodeSelector: map[string]string{
+				"kubernetes.io/hostname": nodeName,
+			},
+		},
+	}
+
+	debugPod, err = k8sClient.CoreV1().Pods(*namespace).Create(debugPod)
+	if err != nil {
+		log.Fatalf("error creating debugPod: %v", err)
+	}
 }
