@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"net/url"
-	"os"
 	"time"
+
+	dockerterm "github.com/docker/docker/pkg/term"
+	"k8s.io/kubernetes/pkg/kubectl/util/term"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -145,20 +146,26 @@ func (dp *DebugPod) Clean() error {
 
 func (dp *DebugPod) Attach() error {
 
-	u, err := url.Parse(dp.k8sConfig.Host)
-	switch u.Scheme {
-	case "https":
-		u.Scheme = "wss"
-	case "http":
-		u.Scheme = "ws"
-	default:
-		return fmt.Errorf("Malformed URL %v", u)
-	}
-	u.Path = fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/exec", dp.targetNamespace, dp.podName)
-	u.RawQuery = fmt.Sprintf("command=%s&container=%s&stderr=true&stdout=true", "ls -al", "debugpod")
-	executor, err := remotecommand.NewSPDYExecutor(dp.k8sConfig, "GET", u)
+	req := dp.k8s.CoreV1().RESTClient().Post().Resource("pods").Name(dp.podName).Namespace(dp.targetNamespace).SubResource("exec")
+	req = req.Param("container", "debugpod")
+	req = req.Param("command", "/bin/bash")
+	req = req.Param("stdin", "true")
+	req = req.Param("stdout", "true")
+	req = req.Param("stderr", "true")
+	req = req.Param("tty", "true")
+
+	executor, err := remotecommand.NewSPDYExecutor(dp.k8sConfig, "POST", req.URL())
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create executor: %v", err)
 	}
-	return executor.Stream(remotecommand.StreamOptions{Tty: true, Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr})
+	stdin, stdout, _ := dockerterm.StdStreams()
+
+	t := term.TTY{
+		Out: stdout,
+		In:  stdin,
+	}
+
+	terminalSize := t.MonitorSize(t.GetSize())
+
+	return executor.Stream(remotecommand.StreamOptions{Tty: true, Stdin: t.In, Stdout: t.Out, TerminalSizeQueue: terminalSize})
 }
