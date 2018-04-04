@@ -1,16 +1,17 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 
-	"k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -58,52 +59,30 @@ func main() {
 		log.Fatalf("unable to setup client: %v", err)
 
 	}
-	log.Printf("searching pod %s", *podName)
-	pod, err := k8sClient.CoreV1().Pods(*namespace).Get(*podName, metav1.GetOptions{})
+
+	var debugPod *DebugPod
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		cancel()
+		time.Sleep(2 * time.Second)
+		os.Exit(1)
+	}()
+
+	debugPod, err = NewDebugPod(ctx, k8sClient, *namespace, *podName)
 	if err != nil {
-		log.Fatalf("unable to get pod %s: %v", *podName, err)
+		log.Fatalf("%v", err)
 	}
 
-	nodeName := pod.Spec.NodeName
-	log.Printf("pod %s is on node %s", *podName, nodeName)
-
-	privilegeEscalation := true
-	privileged := true
-
-	log.Println("creating debugPod")
-	debugPod := &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "debugger",
-			Namespace: *namespace,
-		},
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{
-				v1.Container{
-					Name:  "debugger",
-					Image: "debugger",
-					SecurityContext: &v1.SecurityContext{
-						AllowPrivilegeEscalation: &privilegeEscalation,
-						Privileged:               &privileged,
-					},
-				},
-			},
-			NodeSelector: map[string]string{
-				"kubernetes.io/hostname": nodeName,
-			},
-		},
-	}
-
-	debugPod, err = k8sClient.CoreV1().Pods(*namespace).Create(debugPod)
+	log.Println("creating debugPod ")
+	err = debugPod.Create()
 	if err != nil {
-		log.Fatalf("error creating debugPod: %v", err)
-	}
-	for {
-		status, err := k8sClient.CoreV1().Pods(*namespace).Get("debugger", metav1.GetOptions{})
-		if err != nil {
-			log.Println("unable to retrieve debug pod status")
-		}
-		log.Printf("Status is: %s", status.Status.Phase)
-		time.Sleep(1 * time.Second)
+		log.Fatalf("%v", err)
 	}
 
+	_ = debugPod
 }
