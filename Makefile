@@ -3,8 +3,8 @@ all:
 container: container_build container_upload
 
 container_build:
-	docker build -t josledp/debugger container/
+	docker build -t josledp/debugpod container/
 
 container_upload:
 	 DOCKER_ID_USER="josledp" docker login
-	 docker push josledp/debugger
+	 docker push josledp/debugpod
