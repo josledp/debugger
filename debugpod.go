@@ -4,11 +4,16 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"net/url"
+	"os"
 	"time"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/remotecommand"
 )
 
 type DebugPod struct {
@@ -17,17 +22,25 @@ type DebugPod struct {
 	targetNode      string
 	podName         string
 	pod             *v1.Pod
+	k8sConfig       *rest.Config
 	k8s             *kubernetes.Clientset
 	ctx             context.Context
 }
 
-func NewDebugPod(ctx context.Context, k8sClient *kubernetes.Clientset, namespace, targetPod string) (*DebugPod, error) {
+func NewDebugPod(ctx context.Context, k8sConfig *rest.Config, namespace, targetPod string) (*DebugPod, error) {
+
+	k8sClient, err := kubernetes.NewForConfig(k8sConfig)
+	if err != nil {
+		return nil, fmt.Errorf("unable to setup client: %v", err)
+	}
+	r := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
 
 	dp := &DebugPod{
 		targetPod:       targetPod,
 		targetNamespace: namespace,
-		podName:         fmt.Sprintf("debug-%s-%d", targetPod, rand.Int63()),
+		podName:         fmt.Sprintf("debug-%s-%d", targetPod, r.Int63()),
 		k8s:             k8sClient,
+		k8sConfig:       k8sConfig,
 		ctx:             ctx,
 	}
 
@@ -128,4 +141,24 @@ func (dp *DebugPod) Create() error {
 
 func (dp *DebugPod) Clean() error {
 	return dp.k8s.CoreV1().Pods(dp.targetNamespace).Delete(dp.podName, &metav1.DeleteOptions{})
+}
+
+func (dp *DebugPod) Attach() error {
+
+	u, err := url.Parse(dp.k8sConfig.Host)
+	switch u.Scheme {
+	case "https":
+		u.Scheme = "wss"
+	case "http":
+		u.Scheme = "ws"
+	default:
+		return fmt.Errorf("Malformed URL %v", u)
+	}
+	u.Path = fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/exec", dp.targetNamespace, dp.podName)
+	u.RawQuery = fmt.Sprintf("command=%s&container=%s&stderr=true&stdout=true", "ls -al", "debugpod")
+	executor, err := remotecommand.NewSPDYExecutor(dp.k8sConfig, "GET", u)
+	if err != nil {
+		return err
+	}
+	return executor.Stream(remotecommand.StreamOptions{Tty: true, Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr})
 }

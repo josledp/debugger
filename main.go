@@ -12,7 +12,6 @@ import (
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -52,13 +51,6 @@ func main() {
 		}
 
 	}
-	log.Println("creating k8s client")
-	// creates the clientset
-	k8sClient, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		log.Fatalf("unable to setup client: %v", err)
-
-	}
 
 	var debugPod *DebugPod
 
@@ -68,21 +60,34 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		cancel()
-		time.Sleep(2 * time.Second)
-		os.Exit(1)
+		exit(cancel, 1)
 	}()
 
-	debugPod, err = NewDebugPod(ctx, k8sClient, *namespace, *podName)
+	debugPod, err = NewDebugPod(ctx, config, *namespace, *podName)
 	if err != nil {
-		log.Fatalf("%v", err)
+		log.Printf("%v", err)
+		exit(cancel, 1)
 	}
 
 	log.Println("creating debugPod ")
 	err = debugPod.Create()
 	if err != nil {
-		log.Fatalf("%v", err)
+		log.Printf("%v", err)
+		exit(cancel, 1)
 	}
 
-	_ = debugPod
+	log.Println("attaching to debugPod")
+	err = debugPod.Attach()
+	if err != nil {
+		log.Printf("%v", err)
+		exit(cancel, 1)
+	}
+	exit(cancel, 0)
+
+}
+
+func exit(cancel context.CancelFunc, code int) {
+	cancel()
+	time.Sleep(2 * time.Second)
+	os.Exit(1)
 }
