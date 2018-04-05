@@ -151,7 +151,6 @@ func (dp *DebugPod) Attach() error {
 	req = req.Param("command", "/bin/bash")
 	req = req.Param("stdin", "true")
 	req = req.Param("stdout", "true")
-	req = req.Param("stderr", "true")
 	req = req.Param("tty", "true")
 
 	executor, err := remotecommand.NewSPDYExecutor(dp.k8sConfig, "POST", req.URL())
