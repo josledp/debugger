@@ -61,6 +61,9 @@ func NewDebugPod(ctx context.Context, k8sConfig *rest.Config, namespace, targetP
 			Namespace: dp.targetNamespace,
 		},
 		Spec: v1.PodSpec{
+			HostIPC:     true,
+			HostPID:     true,
+			HostNetwork: true,
 			Containers: []v1.Container{
 				v1.Container{
 					Name:  "debugpod",
