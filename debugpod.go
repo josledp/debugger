@@ -92,7 +92,7 @@ func (dp *DebugPod) waitForPod(timeout int) error {
 		}
 		select {
 		case <-dp.ctx.Done():
-			dp.Clean()
+			dp.Clean(nil)
 			return fmt.Errorf("exited because requested")
 		default:
 		}
@@ -108,7 +108,7 @@ func (dp *DebugPod) waitForPod(timeout int) error {
 		}
 		select {
 		case <-dp.ctx.Done():
-			dp.Clean()
+			dp.Clean(nil)
 			return fmt.Errorf("exited because requested")
 		default:
 		}
@@ -117,31 +117,36 @@ func (dp *DebugPod) waitForPod(timeout int) error {
 	return fmt.Errorf("Pod not ready after %d seconds", timeout)
 }
 
-func (dp *DebugPod) Create() error {
+func (dp *DebugPod) Create() (<-chan struct{}, error) {
 	var err error
 	dp.pod, err = dp.k8s.CoreV1().Pods(dp.targetNamespace).Create(dp.pod)
 	if err != nil {
-		return fmt.Errorf("error creating debugPod: %v", err)
+		return nil, fmt.Errorf("error creating debugPod: %v", err)
 	}
 
 	err = dp.waitForPod(30)
 
 	if err != nil {
-		err2 := dp.Clean()
+		err2 := dp.Clean(nil)
 		if err2 != nil {
-			return fmt.Errorf("debugPod did not get ready status: %v\nFurthermore there was an error cleaning the pod %s: %v", err, dp.podName, err2)
+			return nil, fmt.Errorf("debugPod did not get ready status: %v\nFurthermore there was an error cleaning the pod %s: %v", err, dp.podName, err2)
 		}
-		return fmt.Errorf("debugPod did not get ready status: %v", err)
+		return nil, fmt.Errorf("debugPod did not get ready status: %v", err)
 	}
+	end := make(chan struct{})
 	go func() {
 		<-dp.ctx.Done()
-		dp.Clean()
+		dp.Clean(end)
 	}()
-	return nil
+	return end, nil
 }
 
-func (dp *DebugPod) Clean() error {
-	return dp.k8s.CoreV1().Pods(dp.targetNamespace).Delete(dp.podName, &metav1.DeleteOptions{})
+func (dp *DebugPod) Clean(end chan<- struct{}) error {
+	err := dp.k8s.CoreV1().Pods(dp.targetNamespace).Delete(dp.podName, &metav1.DeleteOptions{})
+	if end != nil {
+		close(end)
+	}
+	return err
 }
 
 func (dp *DebugPod) Attach() error {

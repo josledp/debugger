@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 
@@ -56,38 +55,40 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	debugPod, err = NewDebugPod(ctx, config, *namespace, *podName)
+	if err != nil {
+		log.Printf("%v", err)
+		exit(cancel, nil, 1)
+	}
+
+	log.Println("creating debugPod ")
+	end, err := debugPod.Create()
+	if err != nil {
+		log.Printf("%v", err)
+		exit(cancel, end, 1)
+	}
+
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		exit(cancel, 1)
+		exit(cancel, end, 1)
 	}()
-
-	debugPod, err = NewDebugPod(ctx, config, *namespace, *podName)
-	if err != nil {
-		log.Printf("%v", err)
-		exit(cancel, 1)
-	}
-
-	log.Println("creating debugPod ")
-	err = debugPod.Create()
-	if err != nil {
-		log.Printf("%v", err)
-		exit(cancel, 1)
-	}
 
 	log.Println("attaching to debugPod")
 	err = debugPod.Attach()
 	if err != nil {
 		log.Printf("%v", err)
-		exit(cancel, 1)
+		exit(cancel, end, 1)
 	}
-	exit(cancel, 0)
+	exit(cancel, end, 0)
 
 }
 
-func exit(cancel context.CancelFunc, code int) {
+func exit(cancel context.CancelFunc, end <-chan struct{}, code int) {
 	cancel()
-	time.Sleep(2 * time.Second)
-	os.Exit(1)
+	if end != nil {
+		<-end
+	}
+	os.Exit(code)
 }
