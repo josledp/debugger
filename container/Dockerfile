@@ -19,4 +19,5 @@ RUN apt-get update &&   \
       docker-ce         \
       &&                \
     apt-get clean
-CMD ["sleep", "72000"]
+ADD entrypoint.sh /
+ENTRYPOINT ["/entrypoint.sh"]
