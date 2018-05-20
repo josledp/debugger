@@ -54,6 +54,8 @@ func NewDebugPod(ctx context.Context, k8sConfig *rest.Config, namespace, targetP
 
 	privilegeEscalation := true
 	privileged := true
+	containerID := pod.Status.ContainerStatuses[0].ContainerID
+	hostPathType := v1.HostPathFile
 
 	dp.pod = &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -68,11 +70,21 @@ func NewDebugPod(ctx context.Context, k8sConfig *rest.Config, namespace, targetP
 				v1.Container{
 					Name:  "debugpod",
 					Image: "josledp/debugpod",
+					//					Args:  []string{containerID},
+					Env: []v1.EnvVar{
+						v1.EnvVar{Name: "CONTAINER_ID", Value: containerID},
+					},
 					SecurityContext: &v1.SecurityContext{
 						AllowPrivilegeEscalation: &privilegeEscalation,
 						Privileged:               &privileged,
 					},
+					VolumeMounts: []v1.VolumeMount{
+						v1.VolumeMount{Name: "dockersock", MountPath: "/var/run/docker.sock"},
+					},
 				},
+			},
+			Volumes: []v1.Volume{
+				v1.Volume{Name: "dockersock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/docker.sock", Type: &hostPathType}}},
 			},
 			NodeSelector: map[string]string{
 				"kubernetes.io/hostname": dp.targetNode,
