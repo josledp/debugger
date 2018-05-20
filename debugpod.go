@@ -68,8 +68,9 @@ func NewDebugPod(ctx context.Context, k8sConfig *rest.Config, namespace, targetP
 			HostNetwork: true,
 			Containers: []v1.Container{
 				v1.Container{
-					Name:  "debugpod",
-					Image: "josledp/debugpod",
+					Name:            "debugpod",
+					Image:           "josledp/debugpod",
+					ImagePullPolicy: v1.PullAlways,
 					//					Args:  []string{containerID},
 					Env: []v1.EnvVar{
 						v1.EnvVar{Name: "CONTAINER_ID", Value: containerID},
