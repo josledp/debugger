@@ -20,24 +20,38 @@ func main() {
 	var config *rest.Config
 	var err error
 
-	if home := os.Getenv("HOME"); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "absolute path to the kubeconfig file")
+	fg := flag.NewFlagSet("debugpod", flag.ExitOnError)
+	kubeConfigFile := os.Getenv("KUBECONFIG")
+	if kubeConfigFile == "" {
+		if home := os.Getenv("HOME"); home != "" {
+			kubeconfig = fg.String("kubeconfig", filepath.Join(home, ".kube", "config"), "absolute path to the kubeconfig file")
+		} else {
+			kubeconfig = fg.String("kubeconfig", "", "absolute path to the kubeconfig file")
+		}
 	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+		kubeconfig = fg.String("kubeconfig", kubeConfigFile, "absolute path to the kubeconfig file")
 	}
-	inCluster := flag.Bool("in-cluster", false, "configure in cluster")
-	podName := flag.String("pod", "", "pod to debug")
-	namespace := flag.String("namespace", "default", "(optional) namespace of the pod")
 
-	flag.Parse()
+	inCluster := fg.Bool("in-cluster", false, "configure in cluster")
+	podName := fg.String("pod", "", "pod to debug")
+	namespace := fg.String("namespace", "default", "(optional) namespace of the pod")
+
+	err = fg.Parse(os.Args[1:])
+	if err != nil {
+		log.Fatalf("unable to parse args: %v", err)
+	}
 
 	if *podName == "" {
-		log.Fatalln("pod option must be specified")
+		log.Println("pod option must be specified")
+		fg.Usage()
+		os.Exit(1)
 	}
 
 	if !*inCluster {
 		if *kubeconfig == "" {
-			log.Fatalf("kubeconfig path must be specified")
+			log.Println("kubeconfig path must be specified")
+			fg.Usage()
+			os.Exit(1)
 		}
 		config, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
 		if err != nil {
