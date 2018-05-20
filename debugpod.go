@@ -127,7 +127,7 @@ func (dp *DebugPod) Create() (<-chan struct{}, error) {
 		return nil, fmt.Errorf("error creating debugPod: %v", err)
 	}
 
-	err = dp.waitForPod(30)
+	err = dp.waitForPod(60)
 
 	if err != nil {
 		err2 := dp.Clean(nil)
