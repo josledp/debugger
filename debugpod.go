@@ -169,7 +169,7 @@ func (dp *DebugPod) Attach() error {
 
 	req := dp.k8s.CoreV1().RESTClient().Post().Resource("pods").Name(dp.podName).Namespace(dp.targetNamespace).SubResource("exec")
 	req = req.Param("container", "debugpod")
-	req = req.Param("command", "/bin/bash")
+	req = req.Param("command", "/entrypoint.sh")
 	req = req.Param("stdin", "true")
 	req = req.Param("stdout", "true")
 	req = req.Param("tty", "true")

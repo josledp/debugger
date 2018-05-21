@@ -20,4 +20,4 @@ RUN apt-get update &&   \
       &&                \
     apt-get clean
 ADD entrypoint.sh /
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["sleep", "7200"]
